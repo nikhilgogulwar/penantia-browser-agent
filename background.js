@@ -8,7 +8,7 @@ const DEFAULT_WS_URL = "wss://penantia-ai-backend-x64glrg3eq-as.a.run.app/extens
 const RECONNECT_BASE_MS = 2000;
 const RECONNECT_MAX_MS = 30000;  // 30s — covers Cloud Run cold start
 const PORT_CYCLE_MS = 295000;    // 295s — evades Chrome's 5-min port hard kill
-const HEARTBEAT_MINUTES = 0.4;   // 24s — resets Chrome's 30s idle kill
+const HEARTBEAT_MINUTES = 1.0;   // 1min — Chrome minimum, avoids notification ping sound
 
 // --- State ---
 let ws = null;
@@ -18,7 +18,7 @@ let wsConnecting = false;
 // ============================================================
 // KEEPALIVE 1 — chrome.alarms heartbeat (resets 30s idle kill)
 // ============================================================
-chrome.alarms.create("penantia-heartbeat", { periodInMinutes: HEARTBEAT_MINUTES });
+chrome.alarms.create("penantia-heartbeat", { periodInMinutes: 1.0 }); // 1min minimum — avoids Chrome ping sound
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== "penantia-heartbeat") return;
   // Minimal storage write resets Chromium idle timer
@@ -153,7 +153,9 @@ async function handleCommand(cmd) {
     try {
       await chrome.tabs.update(tab.id, { url: cmd.url });
       await waitForTabLoad(tab.id, 20000);
-      // After load, take a snapshot
+      // Inject content script after page load (content_scripts may not fire on programmatic nav)
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] }).catch(() => {});
+      await new Promise(r => setTimeout(r, 600)); // wait for onMessage listener to register
       const snapshot = await sendToContentScript(tab.id, { cmd: "snapshot" });
       send({ type: "action_result", req_id, ok: true, url: cmd.url, post_snapshot: snapshot });
     } catch (err) {
@@ -168,7 +170,8 @@ async function handleCommand(cmd) {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       files: ["content.js"]
-    }).catch(() => {}); // ignore if already injected
+    }).catch(() => {});
+    await new Promise(r => setTimeout(r, 400)); // wait for onMessage listener
 
     const result = await sendToContentScript(tab.id, { ...cmd });
     send({ ...result, req_id });
