@@ -71,7 +71,6 @@ async function runInPage(tabId, fn, args = []) {
     target: { tabId },
     func: fn,
     args,
-    world: "MAIN",
   });
   return results?.[0]?.result;
 }
