@@ -217,3 +217,23 @@ function waitForTabLoad(tabId, timeoutMs) {
 // Startup
 connect();
 console.log("[Penantia] Background service worker started v" + VERSION);
+
+// ============================================================
+// INTERNAL MESSAGES — popup.js communication
+// ============================================================
+chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
+  if (msg.cmd === "popup_status") {
+    reply({ wsOpen: ws !== null && ws.readyState === WebSocket.OPEN });
+    return false;
+  }
+  if (msg.cmd === "reconnect") {
+    if (ws) { try { ws.close(); } catch {} ws = null; }
+    wsReconnectDelay = RECONNECT_BASE_MS;
+    wsConnecting = false;
+    setTimeout(connect, 500);
+    reply({ ok: true });
+    return false;
+  }
+  // Unknown internal messages — ignore
+  return false;
+});
